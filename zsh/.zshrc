@@ -10,7 +10,9 @@ LANG=C
 esac
 
 # PATH設定
-export PATH="$HOME/go/bin:$HOME/bin/:/usr/local/go/bin:$PATH"
+if [ -d ${HOME}/go ]; then
+	export PATH="$HOME/go/bin:$HOME/bin/:/usr/local/go/bin:$PATH"
+fi
 
 # 色設定
 autoload -Uz colors
@@ -76,7 +78,16 @@ add-zsh-hook chpwd chpwd_recent_dirs
 # cdrコマンドで履歴にないディレクトリにも移動可能に
 zstyle ":chpwd:*" recent-dirs-default true
 
-function chpwd(){ls -F --color=always}
+function chpwd(){
+	case ${OSTYPE} in
+		darwin*)
+			ls -FG
+			;;
+		linux*)
+			ls -F --color=always
+			;;
+	esac
+}
 
 # その他
 setopt nolistbeep
@@ -91,10 +102,20 @@ bindkey '^ ' autosuggest-accept
 
 # alias
 setopt complete_aliases
-alias ls="ls --color -F"
-alias ll="ls -l --color -F"
-alias la="ls -a --color -F"
-alias lla="ls -la --color -F"
+case ${OSTYPE} in
+	darwin*)
+		alias ls="ls -FG"
+		alias ll="ls -l -FG"
+		alias la="ls -a -FG"
+		alias lla="ls -l -FG"
+	;;
+	linux*)
+		alias ls="ls --color -F"
+		alias ll="ls -l --color -F"
+		alias la="ls -a --color -F"
+		alias lla="ls -la --color -F"
+		;;
+esac
 alias diff="diff -u"
 alias memcheck="ps alx | awk '{printf (\"%d\t%s\n\", \$8,\$13)}' | sort -nr | head -10"
 alias where="command -v"
@@ -135,3 +156,4 @@ bindkey '^xb' zaw-cdr
 bindkey '^x^b' zaw-git-recent-branches
 bindkey '^x^f' zaw-git-files
 bindkey '^x^r' zaw-history
+
