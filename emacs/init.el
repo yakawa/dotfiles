@@ -17,14 +17,20 @@
   (unless (package-installed-p 'use-package)
     (package-refresh-contents)
     (package-install 'use-package)
-    (package-install 'diminish))
-
+    )
   (defvar use-package-always-ensure t)
   (defvar use-package-expand-minimally t)
 
   (require 'use-package)
-  (require 'diminish)
   )
+
+(defun set-exec-path-from-shell-PATH()
+  "Read $PATH from shell."
+  (interactive)
+  (let ((path-from-shell (replace-regexp-in-string "[ \t\n]*$" "" (shell-command-to-string "$SHELL --login -i -c 'echo $PATH'"))))
+    (setenv "PATH" path-from-shell)
+    (setq exec-path (split-string path-from-shell path-separator))))
+(set-exec-path-from-shell-PATH)
 
 ;; Defaut Encoding
 (prefer-coding-system 'utf-8-unix)
@@ -37,11 +43,12 @@
 
 ;; Startup
 (setq inhibit-startup-screen t) ;; Start-up を表示しない
-(setq inhibit-startup-message t) ;; Start-up を表示しない
-(setq inhibit-startup-echo-area-message t) ;; Start-up を表示しない
-(setq initial-scratch-message t) ;; Start-up を表示しない
+(setq inhibit-startup-message nil) ;; Start-up を表示しない
+(setq inhibit-startup-echo-area-message nil) ;; Start-up を表示しない
+(setq initial-scratch-message nil) ;; Start-up を表示しない
 
 (setq ring-bell-function 'ignore)
+
 
 ;; Backup
 (setq auto-save-file-name-transforms `((".*" "~/.emacs.d/auto-saves/" t)))
@@ -53,8 +60,10 @@
 (setq kept-old-versions 1)
 (setq delete-old-versions t)
 
-(scroll-bar-mode nil)
-(menu-bar-mode t)
+(if (or (equal window-system 'ns) (equal window-system 'mac))
+    (menu-bar-mode nil)
+  (menu-bar-mode t)
+  )
 (tool-bar-mode -1) ;; ツールバーの非表示
 (column-number-mode t) ;; カラム番号の表示
 (size-indication-mode t) ;; ファイルサイズの表示
@@ -115,21 +124,6 @@
                 initial-frame-alist))
 (setq default-frame-alist initial-frame-alist)
 
-(use-package whitespace
-  :ensure t
-  :config
-  (setq whitespace-style '(face
-                           trailing
-                           tabs
-                           ;;empty
-                           space-mark
-                           tab-mark
-                           ))
-  (setq whitespace-display-mappings
-        '((tab-mark ?\t [?\u00BB ?\t][?\\ ?\t])))
-  (global-whitespace-mode t)
-  )
-
 (use-package volatile-highlights
   :ensure t
   :config
@@ -154,10 +148,9 @@
   (setq company-selection-wrap-around t)
   (defvar company-dabbrev-downcase nil)
   (setq company-backends '(
-                           comapny-semantic
                            company-files
                            (company-capf company-dabbrev)
-                           (comapny-dabbrev-code comapny-gtags comapny-etags company-keywords)
+                           (company-dabbrev-code company-gtags company-etags company-keywords)
                            ))
   :bind
   (("C-M-i" . company-complete)
@@ -173,18 +166,34 @@
    ("C-n" . company-select-next)
    ("C-p" . company-select-previous)))
 
+(defun edit-category-table-for-company-dabbrev (&optional table)
+  "Table as for company Dabbrev."
+  (define-category ?s "Word constituents for company-dabbrev" table)
+  (let ((i 0))
+    (while (< i 128)
+      (if (equal ?w (char-syntax i))
+          (modify-category-entry i ?s table)
+        (modify-category-entry i ?s table t))
+      (setq i (1+ i)))))
+(edit-category-table-for-company-dabbrev)
+(setq company-dabbrev-char-regexp "\\cs")
+
 (use-package company-go
 	:ensure t)
 (push 'company-go company-backends)
 
-
 (use-package irony
   :ensure t
+  :after company
   :hook
   ((c-mode-hook . irony-mode)
    (c++-mode-hook . irony-mode)
    ))
-(push 'company-irony company-backends)
+
+(use-package company-irony
+  :ensure t
+  :config
+  (push 'company-irony company-backends))
 
 ;; M-x jedi:install-server RET
 (use-package company-jedi
@@ -267,38 +276,6 @@
 	(defadvice helm-ff-kill-or-find-buffer-fname (around execute-only-if-exist activate)
 		"Execute command lnly if CANDIDATE exists"
 		(when (file-exists-p candidate) ad-do-it)))
-
-(use-package tabbar
-  :ensure t
-  :config
-  (tabbar-mode)
-  (tabbar-mwheel-mode nil)
-  (setq tabbar-buffer-groups-function nil)
-  (setq tabbar-use-images nil)
-  (dolist (btn '(tabbar-buffer-home-button
-                 tabbar-scroll-left-button
-                 tabbar-scroll-right-button))
-    (set btn (cons (cons "" nil)
-                   (cons "" nil))))
-  (setq tabbar-separator '(2.0))
-  (defun my-tabbar-buffer-list ()
-    (delq nil
-          (mapcar #'(lambda (b)
-                      (cond
-                       ;; Always include the current buffer
-                       ((eq (current-buffer) b) b)
-                       ((buffer-file-name b) b)
-                       ((char-equal ?\ (aref (buffer-name b) 0))nil)
-                       ((equal "*scratch*" (buffer-name b)) b)
-                       ((equal "*helm ag results" (buffer-name b)) b)
-                       ((char-equal ?* (aref (buffer-name b) 0)) nil)
-                       ((buffer-live-p b) b)))
-                  (buffer-list))))
-  (setq tabbar-buffer-list-function 'my-tabbar-buffer-list)
-  :bind
-  (("C-<tab> . tabbar-forward-tab")
-   ("C-S-<tab>" . tabbar-backward-tab))
-  )
 
 (use-package helm-descbinds
 	:ensure t
@@ -519,35 +496,54 @@
 (add-to-list 'exec-path (expand-file-name "~/go/bin"))
 (add-to-list 'exec-path (expand-file-name "~/.go/bin"))
 
-(use-package go-mode
-  :ensure t)
-(add-hook 'before-save-hook 'gofmt-before-save)
-(setq indent-tabs-mode nil)
-(defvar c-basic-offet 2)
-(setq tab-width 2)
-
 (use-package go-eldoc
 	:ensure t)
-(add-hook 'go-mode-hook 'go-eldoc-setup)
 
-(defvar lsp-auto-configure nil)
 (use-package lsp-mode
   :ensure t
-  :hook
-  (go-mode-hook . lsp-deferred)
-  :commands
-  (lsp)
-  )
+  :commands (lsp lsp-deferred lsp-format-buffer lsp-organize-imports)
+  :hook (go-mode . lsp-deferred))
+(setq lsp-gopls-use-placeholders t)
+;; Set up before-save hooks to format buffer and add/delete imports.
+;; Make sure you don't have other gofmt/goimports hooks enabled.
+(defun lsp-go-install-save-hooks ()
+  "Lsp go install save hooks."
+  (add-hook 'before-save-hook #'lsp-format-buffer t t)
+  (add-hook 'before-save-hook #'lsp-organize-imports t t))
+(add-hook 'go-mode-hook #'lsp-go-install-save-hooks)
 
+;; Optional - provides fancier overlays.
 (use-package lsp-ui
   :ensure t
   :commands lsp-ui-mode)
 
+;; company-lsp integrates company mode completion with lsp-mode.
+;; completion-at-point also works out of the box but doesn't support snippets.
 (use-package company-lsp
   :ensure t
-  :init
+  :config
   (push 'company-lsp company-backends)
+  :commands company-lsp)
+
+;; Optional - provides snippet support.
+(use-package yasnippet
+  :ensure t
+  :commands yas-minor-mode
+  :hook (go-mode . yas-minor-mode))
+
+(use-package go-mode
+  :ensure t
+  :hook
+  (
+   (go-mode-hook . lsp)
+   (go-mode-hook . company-mode)
+   (go-mode-hook . go-eldoc-setup)
+   (before-save-hook . gofmt-before-save)
+   )
   )
+(setq indent-tabs-mode nil)
+(defvar c-basic-offet 2)
+(setq tab-width 2)
 
 (use-package helm-lsp
   :ensure t
@@ -556,10 +552,10 @@
 (use-package lsp-treemacs
   :config
   (lsp-metals-treeview-enable t)
-  (setq lsp-metals-treeview-show-when-views-received t))
+  )
 
 
-(setq lsp-log-io t)
+(setq lsp-log-io nil)
 (setq lsp-print-performance nil)
 (setq lsp-auto-guess-root nil)
 (setq lsp-response-timeout 5)
@@ -570,14 +566,6 @@
 (setq lsp-ui-doc-max-width 150)
 (setq lsp-ui-doc-max-height 30)
 (setq lsp-ui-peek-enable t)
-
-(use-package popwin
-  :ensure t
-  :config
-  (popwin-mode t)
-  (setq display-buffer-function 'popwin:display-buffer)
-  (push '("^\*go-direx:" :regexp t :position left :width 0.4 :dedicated t :stick t)
-        popwin:special-display-config))
 
 (use-package direx
   :ensure t)
@@ -590,10 +578,27 @@
 (use-package page-break-lines
   :ensure t)
 
-(use-package dashboard
-  :ensure t
-  :config
-  (dashboard-setup-startup-hook))
+(when (or (eq system-type 'gnu/linux) (and (eq system-type 'darwin)(eq window-system nil)))
+  (use-package dashboard
+    :ensure t
+    :config
+    (setq dashboard-center-content t)
+    (dashboard-setup-startup-hook)
+    )
+  )
+(when (and (eq system-type 'darwin) (not (eq window-system nil)))
+  (use-package dashboard
+    :ensure t
+    :hook
+    (after-init . dashboard-setup-startup-hook)
+    :config
+    (setq dashboard-banner-logo-title
+          (concat "GNU Emacs " emacs-version " kernel "
+                  (car (split-string (shell-command-to-string "uname -r"))) " x86_64 Mac OS X"
+                  (car (split-string (shell-command-to-string "sw_vers -productVersion") "-"))))
+    (setq dashboard-center-content t)
+    )
+  )
 
 (use-package hide-mode-line
   :hook
@@ -636,15 +641,6 @@
 (when (eq system-type 'darwin)
   (setq ns-command-modifier (quote meta)))
 
-(defun set-exec-path-from-shell-PATH()
-	"Read $PATH from shell."
-	(interactive)
-	(let ((path-from-shell (replace-regexp-in-string "[ \t\n]*$" "" (shell-command-to-string "$SHELL --login -i -c 'echo $PATH'"))))
-		(setenv "PATH" path-from-shell)
-		(setq exec-path (split-string path-from-shell path-separator))))
-(set-exec-path-from-shell-PATH)
-
-
 (when (eq system-type 'darwin)
   (defun copy-from-osx()
     (shell-command-to-string "pbpaste"))
@@ -678,11 +674,12 @@
           '(lambda ()
              (hs-minor-mode 1)))
 
-(set-frame-font "MigMix 1M" 12)
+(unless (eq window-system nil)
+  (set-frame-font "MigMix 1M" 12))
 
 (setq custom-file (expand-file-name "~/.emacs.d/customize.el"))
-(if (file-exists-p (expand-file-name custom-file))
-    (load (expand-file-name custom-file)t nil nil)
-    )
+;;(if (file-exists-p (expand-file-name custom-file))
+;;    (load (expand-file-name custom-file)t nil nil)
+;;    )
 
 ;;; init.el ends here
