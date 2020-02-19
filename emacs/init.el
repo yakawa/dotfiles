@@ -5,6 +5,8 @@
 
 ;;; Code:
 
+(add-to-list 'load-path (expand-file-name "~/.emacs.d/site-lisp"))
+
 ;; Package / use-package 設定
 (eval-when-compile
   (require 'package)
@@ -939,6 +941,104 @@ _SPC_: next page   _a_: top of line  _u_: view undo      _m_: magit-status  _j_:
   ("s" swiper-for-region-or-swiper)
   ("," hydra-window/body :exit t)
   ("." nil :color blue))
+
+(require 'open-godoc)
+(defun go-internal-toggle-to-test-file ()
+  "Open Test File."
+  (let ((current-file (buffer-file-name))
+        (tmp-file (buffer-file-name)))
+    (cond ((string-match "_test.go$" current-file)
+           (setq tmp-file (replace-regexp-in-string "_test.go$" ".go" tmp-file)))
+          ((string-match ".go$" current-file)
+           (setq tmp-file (replace-regexp-in-string ".go$" "_test.go" tmp-file))))
+    (unless (eq current-file tmp-file)
+      (find-file tmp-file)))
+  )
+
+(defun other-window-or-split ()
+  (interactive)
+  (when (one-window-p)
+    (split-window-horizontally))
+  (other-window 1))
+
+(defun go-open-with-test-file ()
+  "Open Test file."
+  (interactive)
+  (other-window-or-split)
+  (go-internal-toggle-to-test-file))
+
+(defvar my/helm-go-source
+  '((name . "Helm Go")
+    (candidates . (lambda ()
+                    (cons "builtin" (go-packages))))
+    (action . (("Show document" . godoc)
+               ("Import package" . my/helm-go-import-add)))))
+(defun my/helm-go-import-add (candidate)
+  "Helm Go import Add."
+  (dolist (package (helm-marked-candidates))
+    (go-import-add current-prefix-arg package)))
+
+(defun my/helm-go ()
+  (interactive)
+  (helm :source '(my/helm-go-source) :buffer "*helm go*"))
+
+(use-package gotest
+  :ensure t
+  :config
+  (setq go-test-verbose t)
+  :bind
+  (
+   :map go-mode-map
+        (
+         ("C-c C-t" . go-test-current-file)
+         ("C-c t" . go-test-current-test)
+         )
+        )
+  )
+
+(use-package smartrep
+  :ensure t)
+(eval-after-load "flycheck"
+  '(progn
+     (smartrep-define-key
+         go-mode-map "C-c" '(("C-n" . (lambda ()
+                                        (flycheck-next-error)))
+                             ("C-p" . (lambda ()
+                                        (flycheck-previous-error))))))
+  )
+
+(use-package helm-bind-key
+  :ensure t)
+
+(bind-key
+  [f4]
+  (defhydra hydra-go-mode (:exit t :hint nil)
+    "
+  Go-mode^^
+-------------------------------------------------------------------------------------
+ [_f_] format               [_o_] Open Test File     [_M-r_] restart     [_j_] jump (M-.)
+ [_m_] imenu                [_r_] rename             [M-s] session     [_b_] back (M-,)
+ [_a_] add import (C-c C-a) [_x_] eXecute            [M-S] shutdown    [_T_] Test this file
+ [_d_] delete import        [_D_] Desctibe                               [_t_] Test current
+ [_n_] next error           [_p_] Preivious error"
+    ("f" go-fmt)
+    ("m" lsp-ui-imenu)
+    ("a" go-import-add)
+    ("d" go-remove-unused-imports)
+    ("o" go-open-with-test-file)
+    ("r" lsp-rename)
+    ("x" lsp-execute-code-action)
+    ("D" godef-describe)
+    ("j" godef-jump)
+    ("b" pop-tag-mark)
+    ("T" go-test-current-file)
+    ("t" go-test-current-test)
+    ("n" flycheck-next-error)
+    ("p" flycheck-previous-error)
+    ("M-s" lsp-describe-session)
+    ("M-r" lsp-workspace-restart)
+    ("S" lsp-workspace-shutdown)))
+
 
 (setq custom-file (expand-file-name "~/.emacs.d/customize.el"))
 ;;(if (file-exists-p (expand-file-name custom-file))
