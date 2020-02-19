@@ -1,7 +1,7 @@
 ;;; init.el --- Configuration for emacs
 ;; -*- coding: utf-8 -*-
 ;;; Commentary:
-;;
+;; (setq debug-on-error t)
 
 ;;; Code:
 
@@ -43,8 +43,8 @@
 
 ;; Startup
 (setq inhibit-startup-screen t) ;; Start-up を表示しない
-(setq inhibit-startup-message nil) ;; Start-up を表示しない
-(setq inhibit-startup-echo-area-message nil) ;; Start-up を表示しない
+(setq inhibit-startup-message t) ;; Start-up を表示しない
+(setq inhibit-startup-echo-area-message t) ;; Start-up を表示しない
 (setq initial-scratch-message nil) ;; Start-up を表示しない
 
 (setq ring-bell-function 'ignore)
@@ -114,15 +114,8 @@
 (setq create-lockfiles nil)
 (setq vc-handled-backends nil)
 
-(setq initial-frame-alist
-        (append (list
-                 '(width . 137)
-                 '(height . 137)
-                 '(top . 0)
-                 '(left . 0)
-                 )
-                initial-frame-alist))
-(setq default-frame-alist initial-frame-alist)
+(when (or (eq window-system 'ns) (eq window-system 'mac))
+  (set-frame-parameter nil 'fullscreen 'maximized))
 
 (use-package volatile-highlights
   :ensure t
@@ -409,13 +402,26 @@
 (use-package magit
 	:ensure t
   :bind
-  (("C-x g" . magit-status)
-  ))
+  (("C-x g" . magit-status))
+  :config
+  (defadvice magit-status (around magit-fullscreent activate)
+    "Magit-status always in full screen."
+    (window-configuration-to-register :magit-fullscreen)
+    ad-do-it
+    (delete-other-windows))
+  )
 
 (use-package git-gutter
 	:ensure t
 	:config
-	(global-git-gutter-mode t))
+	(global-git-gutter-mode t)
+  (defun git-gutter:toggle-popup-hunk ()
+    "Toggle git-gutter hunk window."
+    (interactive)
+    (if (windows-live-p (git-gutter:popup-buffer-window))
+        (delete-window (git-gutter:popup-buffer-window))
+      (git-gutter:popup-hunk)))
+  )
 
 (use-package flycheck
 	:ensure t)
@@ -552,8 +558,7 @@
 (use-package lsp-treemacs
   :config
   (lsp-metals-treeview-enable t)
-  )
-
+  (setq lsp-metals-treeview-show-when-views-received t))
 
 (setq lsp-log-io nil)
 (setq lsp-print-performance nil)
@@ -675,7 +680,265 @@
              (hs-minor-mode 1)))
 
 (unless (eq window-system nil)
-  (set-frame-font "MigMix 1M" 12))
+  (setq default-frame-alist
+        (append (list
+                 '(font . "MigMix 1M-14"))
+                default-frame-alist))
+  )
+
+(use-package hydra
+  :ensure t)
+
+(defhydra hydra-dired (:hint nil :color pink)
+  "
+_+_ mkdir          _v_iew           _m_ark             _(_ details        _i_nsert-subdir    wdired
+_C_opy             _O_ view other   _U_nmark all       _)_ omit-mode      _$_ hide-subdir    C-x C-q : edit
+_D_elete           _o_pen other     _u_nmark           _l_ redisplay      _w_ kill-subdir    C-c C-c : commit
+_R_ename           _M_ chmod        _t_oggle           _g_ revert buf     _e_ ediff          C-c ESC : abort
+_Y_ rel symlink    _G_ chgrp        _E_xtension mark   _s_ort             _=_ pdiff
+_S_ymlink          ^ ^              _F_ind marked      _._ toggle hydra   F flyspell
+_r_sync            ^ ^              ^ ^                ^ ^                _?_ summary
+_z_ compress-file  _A_ find regexp
+_Z_ compress       _Q_ repl regexp
+
+T - tag prefix
+"
+  ("F" dired-do-ispell)
+  ("(" dired-hide-details-mode)
+  (")" dired-omit-mode)
+  ("+" dired-create-directory)
+  ("=" diredp-ediff)         ;; smart diff
+  ("?" dired-summary)
+  ("$" diredp-hide-subdir-nomove)
+  ("A" dired-do-find-regexp)
+  ("C" dired-do-copy)        ;; Copy all marked files
+  ("D" dired-do-delete)
+  ("E" dired-mark-extension)
+  ("e" dired-ediff-files)
+  ("F" dired-do-find-marked-files)
+  ("G" dired-do-chgrp)
+  ("g" revert-buffer)        ;; read all directories again (refresh)
+  ("i" dired-maybe-insert-subdir)
+  ("l" dired-do-redisplay)   ;; relist the marked or singel directory
+  ("M" dired-do-chmod)
+  ("m" dired-mark)
+  ("O" dired-display-file)
+  ("o" dired-find-file-other-window)
+  ("Q" dired-do-find-regexp-and-replace)
+  ("R" dired-do-rename)
+  ("r" dired-do-rsynch)
+  ("S" dired-do-symlink)
+  ("s" dired-sort-toggle-or-edit)
+  ("t" dired-toggle-marks)
+  ("U" dired-unmark-all-marks)
+  ("u" dired-unmark)
+  ("v" dired-view-file)      ;; q to exit, s to search, = gets line #
+  ("w" dired-kill-subdir)
+  ("Y" dired-do-relsymlink)
+  ("z" diredp-compress-this-file)
+  ("Z" dired-do-compress)
+  ("q" nil)
+  ("." nil :color blue))
+
+(define-key dired-mode-map "." 'hydra-dired/body)
+
+(bind-key
+ [f7]
+ (defhydra hydra-flycheck
+   (:pre (flycheck-list-errors)
+         :post (quit-windows-on "*Flycheck errors*")
+         :hint nil)
+   "Errors"
+   ("f" flycheck-error-list-set-filter "Filter")
+   ("j" flycheck-next-error "Next")
+   ("k" flycheck-previous-error "Previous")
+   ("gg" flycheck-first-error "First")
+   ("G" (progn (goto-char (point-max)) (flycheck-previous-error)) "Last")
+   ("q" nil)))
+
+(bind-key
+ (kbd "C-S-g")
+ (defhydra hydra-git-gutter (:color ref :hint nil)
+    "
+_m_agit  _b_lame  _d_ispatch  _t_imemachine  |  hunk: _p_revious  _n_ext  _s_tage  _r_evert  pop_u_p  _SPC_:toggle"
+    ("m" magit-status :exit t)
+    ("b" magit-blame :exit t)
+    ("t" git-timemachine :exit t)
+    ("d" magit-dispatch :exit t)
+    ("p" git-gutter:previous-hunk)
+    ("n" git-gutter:next-hunk)
+    ("s" git-gutter:stage-hunk)
+    ("r" git-gutter:revert-hunk)
+    ("u" git-gutter:popup-hunk)
+    ("SPC" git-gutter:toggle-popup-hunk)))
+
+(bind-key
+ [f10]
+ (defhydra hydra-browse (:hint nil :exit t)
+  "
+ ^Shop^                           ^Repos^          ^GH^           ^Favorite^      ^Others^       ^Applications
+ ^^^^^^---------------------------------------------------------------------------------------------------
+ _a_: Amazon      _b_: BicCamera  _w_: weather    _c_: Browse-url
+ _r_: Rakuten     _t_: Twitter    _j_: jma
+ _y_: Yodobashi   _g_: github     _q_: Qiita
+ _0_: Gist        _e_: Weather Tokyo
+"
+   ("a" (browse-url "https://www.amazon.co.jp/"))
+   ("r" (browse-url "https://www.rakuten.co.jp/"))
+   ("y" (browse-url "https://www.yodobashi.com/"))
+   ("b" (browse-url "https://www.bivvamera.com/"))
+   ("t" (browse-url "https://twitter.com"))
+   ("g" (browse-url "https://github.com/yakawa"))
+   ("0" (browse-url "https://gist.github.com/yakawa"))
+   ("w" (browse-url "https://tenki.jp/week/6/31/"))
+   ("j" (browse-url "https://www.jma.go.jp/"))
+   ("q" (browse-url "https://qiita.com/yakawa"))
+   ("e" (eww "https://www.jma.go.jp/jp/week/319.html"))
+   ("/" kill-other-buffers)
+   ("," hydra-window/body)
+   ("." hydra-work1/body)
+   ("c" browse-url-at-point)
+   ("<f10>" nil)))
+
+(bind-key
+  [f3]
+  (defhydra hydra-lsp (:exit t :hint nil)
+    "
+ Buffer^^               Server^^                   Symbol
+-------------------------------------------------------------------------------------
+ [_f_] format           [_M-r_] restart            [_d_] declaration  [_i_] implementation  [_o_] documentation
+ [_m_] imenu            [_S_]   shutdown           [_D_] definition   [_t_] type            [_r_] rename
+ [_x_] execute action   [_M-s_] describe session   [_R_] references   [_s_] signature"
+  ("d" lsp-find-declaration)
+  ("D" lsp-ui-peek-find-definitions)
+  ("R" lsp-ui-peek-find-references)
+  ("i" lsp-ui-peek-find-implementation)
+  ("t" lsp-find-type-definition)
+  ("s" lsp-signature-help)
+  ("o" lsp-describe-thing-at-point)
+  ("r" lsp-rename)
+
+  ("f" lsp-format-buffer)
+  ("m" lsp-ui-imenu)
+  ("x" lsp-execute-code-action)
+
+  ("M-s" lsp-describe-session)
+  ("M-r" lsp-restart-workspace)
+  ("S" lsp-shutdown-workspace)))
+
+(add-hook 'view-mode-hook
+      (lambda ()
+        (define-key view-mode-map "i" 'View-exit)
+        (define-key view-mode-map ":" 'View-exit)
+        (define-key view-mode-map "g" 'beginning-of-buffer)
+        (define-key view-mode-map "G" 'end-of-buffer)
+        (define-key view-mode-map "e" 'end-of-line)
+        (define-key view-mode-map "a" 'beginning-of-line)
+        (define-key view-mode-map "b" 'scroll-down-command)
+        (define-key view-mode-map "D" 'my/view-kill-whole-line)
+        (define-key view-mode-map "u" 'my/view-undo)
+        (define-key view-mode-map "X" 'my/view-del-char)
+        (define-key view-mode-map "w" 'my/view-forward-word+1)
+        (define-key view-mode-map "W" 'backward-word)
+        (define-key view-mode-map "s" 'swiper-for-region-or-swiper)
+        (define-key view-mode-map "t" 'git-timemachine)
+        (define-key view-mode-map "v" 'vc-diff)
+        (define-key view-mode-map "[" 'forward-list)
+        (define-key view-mode-map "]" 'backward-list)
+        (define-key view-mode-map "l" 'goto-line)
+        (define-key view-mode-map ";" 'recenter-top-bottom)
+        (define-key view-mode-map "m" 'magit-status)
+        (define-key view-mode-map "B" 'magit-blame)
+        (define-key view-mode-map "j" 'git-gutter:next-hunk)
+        (define-key view-mode-map "k" 'git-gutter:previous-hunk)
+        (define-key view-mode-map "r" 'git-gutter:revert-hunk)
+        (define-key view-mode-map "S" 'git-gutter:stage-hunk)
+        (define-key view-mode-map "p" 'git-gutter:popup-hunk)
+        (define-key view-mode-map "," 'hydra-window/body)
+        (define-key view-mode-map "_" 'delete-other-windows)
+        (define-key view-mode-map "." 'hydra-view-mode/body)))
+
+
+;; Function to edit in view-mode
+(defun my/view-forward-word+1 ()
+  "Forward word+1 in view mode."
+  (interactive)
+  (forward-word)
+  (forward-char))
+(defun my/view-kill-whole-line ()
+  "Kill whole line in view mode."
+  (interactive)
+  (view-mode 0)
+  (kill-whole-line)
+  (save-buffer)
+  (view-mode 1)
+  (message "kill-whole-line and save!"))
+(defun my/view-del-char ()
+  "Delete character in view mode."
+  (interactive)
+  (view-mode 0)
+  (delete-char 1)
+  (save-buffer)
+  (view-mode 1)
+  (message "delete-char"))
+(defun my/view-undo ()
+  "Undo in view mode."
+  (interactive)
+  (view-mode 0)
+  (undo)
+  (save-buffer)
+  (view-mode 1)
+  (message "undo and save!"))
+
+
+;; hydra-view-mode
+(defhydra hydra-view-mode (:hint nil :color pink)
+  "
+_SPC_: next page   _a_: top of line  _u_: view undo      _m_: magit-status  _j_: gg:next-hunk   _s_: swiper
+  _b_: prev page   _e_: end of line  _w_: forward word   _B_: magit-blame   _k_: gg:prev-hunk   _d_: dired-jump
+  _g_: page top    _l_: goto line    _W_: backward word  _t_: timemachine   _p_: gg:popup-hunk  _i_: view exit
+  _G_: page end    _D_: delete line  _[_: forward pair   _v_: vc-diff       _S_: gg:stage-hunk  _q_: view quit
+  _;_: top-bottom  _X_: delete char  _]_: backward pair  _h_: github        _r_: gg:revert-hun  _._: close
+"
+  ;; Move page
+  ("SPC" scroll-up-command)
+  ("b" scroll-down-command)
+  ("g" beginning-of-buffer)
+  ("G" end-of-buffer)
+  ;; Move line
+  ("a" beginning-of-line)
+  ("e" end-of-line)
+  ("w" my/view-forward-word+1)
+  ("W" backward-word)
+  ("D" my/view-kill-whole-line)
+  ("X" my/view-del-char)
+  ("u" my/view-undo)
+  ;; Misc
+  ("i" View-exit :exit t)
+  ("q" View-quit :exit t)
+  (":" View-exit :exit t)
+  ("[" forward-list)
+  ("]" backward-lis)
+  ("l" goto-line)
+  ;; git
+  ("v" vc-diff)
+  ("m" magit-status :exit t)
+  ("B" magit-blame :exit t)
+  ("t" git-timemachine :exit t)
+  ("h" my/github)
+  ;; gitgutter
+  ("j" git-gutter:next-hunk)
+  ("k" git-gutter:previous-hunk)
+  ("p" git-gutter:popup-hunk)
+  ("S" git-gutter:stage-hunk)
+  ("r" git-gutter:revert-hunk)
+  (";" recenter-top-bottom)
+  ;; Others
+  ("d" dired-jump :exit t)
+  ("_" delete-other-windows :exit t)
+  ("s" swiper-for-region-or-swiper)
+  ("," hydra-window/body :exit t)
+  ("." nil :color blue))
 
 (setq custom-file (expand-file-name "~/.emacs.d/customize.el"))
 ;;(if (file-exists-p (expand-file-name custom-file))
