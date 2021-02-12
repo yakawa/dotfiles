@@ -425,9 +425,26 @@
       (git-gutter:popup-hunk)))
   )
 
+(use-package highlight-indent-guides
+  :diminish
+  :hook
+  (yaml-mode . highlight-indent-guides-mode)
+  (python-mode . highlight-indent-guides-mode)
+  :custom
+  (highlight-indent-guides-auto-enabled t)
+  (highlight-indent-guides-responsive t)
+  (highlight-indent-guides-method 'character))
+
 (use-package flycheck
 	:ensure t)
 (add-hook 'after-init-hook #'global-flycheck-mode)
+
+(use-package posframe)
+(use-package flymake-posframe
+  :load-path "<path to 'flymake-posframe'>"
+  :hook (flymake-mode . flymake-posframe-mode)
+  )
+
 
 (use-package pos-tip
   :ensure t)
@@ -510,7 +527,19 @@
 (use-package lsp-mode
   :ensure t
   :commands (lsp lsp-deferred lsp-format-buffer lsp-organize-imports)
-  :hook (go-mode . lsp-deferred))
+  :hook (go-mode . lsp-deferred)
+  (typescript-mode . lsp-deferred)
+  (web-mode . lsp-deferred)
+  (js-mode . lsp-deferred)
+  (python-mode . lsp-deferred)
+  (lsp-mode . (lambda()
+                (let ((lsp-keymap-prefix "C-c l"))
+                  (lsp-enable-which-key-integration))))
+  :config
+  (define-key lsp-mode-map (kbd "C-c l") lsp-command-map)
+  )
+
+
 (setq lsp-gopls-use-placeholders t)
 ;; Set up before-save hooks to format buffer and add/delete imports.
 ;; Make sure you don't have other gofmt/goimports hooks enabled.
@@ -523,7 +552,25 @@
 ;; Optional - provides fancier overlays.
 (use-package lsp-ui
   :ensure t
-  :commands lsp-ui-mode)
+  :commands lsp-ui-mode
+  :custom
+  (lsp-ui-doc-enable t)
+  (lsp-ui-flycheck-enable t)
+  (lsp-ui-sideline-enable t)
+  (lsp-ui-peek-enable t)
+  :hook
+  (lsp-mode . lsp-ui-mode)
+  )
+
+(use-package imenu-list
+  :bind
+  ("<f10>" . imenu-list-smart-toggle)
+  :custom-face
+  (imeu-list-entry-face-1 ((t (:foreground "white"))))
+  :custom
+  (imenu-list-focus-after-activation t)
+  (imenu-list-auto-resize nil)
+  )
 
 ;; company-lsp integrates company mode completion with lsp-mode.
 ;; completion-at-point also works out of the box but doesn't support snippets.
@@ -532,6 +579,17 @@
   :config
   (push 'company-lsp company-backends)
   :commands company-lsp)
+
+(use-package company-box
+  :hook
+  (company-mode . company-box-mode)
+  )
+
+(use-package company-quickhelp
+  :ensure t
+
+  )
+(company-quickhelp-mode)
 
 ;; Optional - provides snippet support.
 (use-package yasnippet
@@ -558,9 +616,8 @@
   :commands helm-lsp-workspace-symbol)
 
 (use-package lsp-treemacs
-  :config
-  (lsp-metals-treeview-enable t)
-  (setq lsp-metals-treeview-show-when-views-received t))
+  :commands lsp-treemacs-error-list
+  )
 
 (setq lsp-log-io nil)
 (setq lsp-print-performance nil)
@@ -609,7 +666,24 @@
 
 (use-package hide-mode-line
   :hook
-  ((minimap-pode) . hide-mode-line-mode))
+  (minimap-pode . hide-mode-line-mode))
+
+(use-package minimap
+  :commands
+  (minimap-bufname minimap-create minimap-kill)
+  :custom
+  (mijnimap-major-modes '(prog-mode))
+
+  (minimap-window-location 'right)
+  (minimap-update-delay 0.2)
+  (minimap-minimum-width 20)
+  :config
+  (custom-set-faces
+   '(mimimap-active-region-background
+     ((((background dark) (:background "#55555555"))
+       (t (:background "#C847D8FEFFFF#"))) :group 'minimap)))
+  )
+
 
 (use-package doom-themes
   :custom
@@ -684,7 +758,7 @@
 (unless (eq window-system nil)
   (setq default-frame-alist
         (append (list
-                 '(font . "MigMix 1M-14"))
+                 '(font . "源ノ角ゴシック Code JP EL-12"))
                 default-frame-alist))
   )
 
@@ -824,9 +898,9 @@ _m_agit  _b_lame  _d_ispatch  _t_imemachine  |  hunk: _p_revious  _n_ext  _s_tag
   ("m" lsp-ui-imenu)
   ("x" lsp-execute-code-action)
 
-  ("M-s" lsp-describe-session)
-  ("M-r" lsp-restart-workspace)
-  ("S" lsp-shutdown-workspace)))
+  ("M-s" nlsp-describe-session)
+  ("M-r" lsp-workspace-restart)
+  ("S" lsp-workspace-shutdown)))
 
 (add-hook 'view-mode-hook
       (lambda ()
@@ -942,7 +1016,7 @@ _SPC_: next page   _a_: top of line  _u_: view undo      _m_: magit-status  _j_:
   ("," hydra-window/body :exit t)
   ("." nil :color blue))
 
-(require 'open-godoc)
+; (require 'open-godoc)
 (defun go-internal-toggle-to-test-file ()
   "Open Test File."
   (let ((current-file (buffer-file-name))
@@ -1038,6 +1112,38 @@ _SPC_: next page   _a_: top of line  _u_: view undo      _m_: magit-status  _j_:
     ("M-s" lsp-describe-session)
     ("M-r" lsp-workspace-restart)
     ("S" lsp-workspace-shutdown)))
+
+
+
+(use-package vue-mode
+  :ensure t
+	:mode
+	(("\\.vue$" . vue-mode))
+  :config
+  (setq mmm-js-mode-enter-hook (lambda () (setq syntax-ppss-table nil)))
+  (setq mmm-typescript-mode-enter-hook (lambda () (setq syntax-ppss-table nil)))
+  (setq js-indent-level 2))
+
+
+(use-package typescript-mode
+  :ensure t
+	:mode
+	(("\\.ts$" . typescript-mode))
+  )
+
+(use-package tide
+  :ensure t
+  :hook
+  ((typescript-mode-hook . (lambda ()
+                             (interactive)
+                             (tide-setup)
+                             (flycheck-mode 1)
+                             (setq flycheck-check-syntax-automatically '(save mode-enabled))
+                             (eldoc-mode 1)
+                             (tide-hl-identifier-mode 1)
+                             (company-mode)
+                             ))
+   ))
 
 
 (setq custom-file (expand-file-name "~/.emacs.d/customize.el"))
