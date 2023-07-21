@@ -10,6 +10,8 @@ LANG=C
 esac
 
 # PATH設定
+export PATH="$HOME/.nodebrew/current/bin:$PATH"
+export PATH="${HOME}/.local/bin:$PATH"
 if [ -d ${HOME}/go ]; then
 	export PATH="$HOME/go/bin:$HOME/bin/:/usr/local/go/bin:$PATH"
 fi
