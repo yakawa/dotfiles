@@ -159,3 +159,13 @@ bindkey '^x^b' zaw-git-recent-branches
 bindkey '^x^f' zaw-git-files
 bindkey '^x^r' zaw-history
 
+if [ -d /Model ]; then
+    export PATH="/Model/local/bin:$PATH"
+    export HDF5="/Model/local/lib"
+    export NETCDF="/Model/local/lib"
+    export LD_LIBRARY_PATH=/Model/local/lib:$LD_LIBRARY_PATH
+    export JASPERINC=/Model/local/include
+    export JASPERLIB=/Model/local/lib
+    export LDFLAGS="-L/Model/local/lib"
+    export CPPFLAGS="-I/Mdel/local/include"
+fi
